@@ -1101,33 +1101,42 @@ function TradeQueryClass:UpdateRealms()
 		self.controls.realm.selIndex = nil
 		self.controls.realm:SetSel(self.pbRealmIndex)
 	end
-
-	if main.POESESSID and main.POESESSID ~= "" then
-		-- Fetch from trade page using POESESSID, includes private leagues
-		ConPrintf("Fetching realms and leagues using POESESSID")
-		self.tradeQueryRequests:FetchRealmsAndLeaguesHTML(function(data, errMsg)
-			if errMsg then
-				self:SetNotice(self.controls.pbNotice, "Error while fetching league list: "..errMsg)
-				return
+	local function processLeagueData(leagueDataObject)
+		local leagues = leagueDataObject.leagues
+		self.allLeagues = {}
+		for _, value in ipairs(leagues) do
+			if not self.allLeagues[value.realm] then self.allLeagues[value.realm] = {} end
+			t_insert(self.allLeagues[value.realm], value.id)
+		end
+		ConPrintTable(self.allLeagues)
+		self.realmIds = {}
+		for _, value in pairs(leagueDataObject.realms) do
+			-- filter out only Path of Exile one realms, as poe2 is not supported yet
+			if value.text:match("PoE 1 ") then
+				self.realmIds[value.text:gsub("PoE 1 ", "")] = value.id
 			end
-			local leagues = data.leagues
-			self.allLeagues = {}
-			for _, value in ipairs(leagues) do
-				if not self.allLeagues[value.realm] then self.allLeagues[value.realm] = {} end
-				t_insert(self.allLeagues[value.realm], value.id)
-			end
-			self.realmIds = {}
-			for _, value in pairs(data.realms) do
-				-- filter out only Path of Exile one realms, as poe2 is not supported yet
-				if value.text:match("PoE 1 ") then
-					self.realmIds[value.text:gsub("PoE 1 ", "")] = value.id
+		end
+	end
+	local function tryFallbacks()
+		if main.TradeLeagueData:len() > 0 then
+			-- full json state obj from HTML
+			local dataStr = main.TradeLeagueData:match('require%(%["main"%].+ t%((.+)%);}%);}%);')
+			if not dataStr then
+				ConPrintf("User-supplied league data is malformed: %s", main.TradeLeagueData)
+			else
+				local data, _, err = dkjson.decode(dataStr)
+				if err then
+					ConPrintf("Failed to parse JSON object. ".. err)
+				else
+					ConPrintf("Using user-supplied league data")
+					processLeagueData(data)
+					setRealmDropList()
+					self:SetNotice(self.controls.pbNotice, "Using user-supplied league data")
+					return
 				end
 			end
-			setRealmDropList()
-
-		end)
-	else
-		-- Fallback to static list
+		end
+		-- Finally, fallback to static list
 		ConPrintf("Using static realms list")
 		self.realmIds = {
 			["PC"]   = "pc",
@@ -1135,5 +1144,22 @@ function TradeQueryClass:UpdateRealms()
 			["Xbox"] = "xbox",
 		}
 		setRealmDropList()
+		self:SetNotice(self.controls.pbNotice, "Using static realms list")
+	end
+
+	if main.POESESSID and main.POESESSID ~= "" then
+		-- Fetch from trade page using POESESSID, includes private leagues
+		ConPrintf("Fetching realms and leagues using POESESSID")
+		self.tradeQueryRequests:FetchRealmsAndLeaguesHTML(function(data, errMsg)
+			if errMsg then
+				self:SetNotice(self.controls.pbNotice, "Error while fetching league list: "..errMsg)
+				tryFallbacks()
+			else
+				processLeagueData(data)
+				setRealmDropList()
+			end
+		end)
+	else
+		tryFallbacks()
 	end
 end

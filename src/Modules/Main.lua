@@ -103,6 +103,7 @@ function main:Init()
 	self.slotOnlyTooltips = true
 	self.POESESSID = ""
 	self.showPublicBuilds = true
+	self.TradeLeagueData = ""
 
 	if self.userPath then
 		self:ChangeUserPath(self.userPath, ignoreBuild)
@@ -617,6 +618,17 @@ function main:LoadSettings(ignoreBuild)
 				if node.attrib.showPublicBuilds then
 					self.showPublicBuilds = node.attrib.showPublicBuilds == "true"
 				end
+				-- If the Misc node has a child, and it's the "TradeLeagueData" node, parse the contents
+				-- into the TradeLeagueData field, for use if grabbing the data from www.pathofexile.com/trade 403s
+				-- when trying to search for items
+				for _, child in ipairs(node) do
+					if child.elem == "TradeLeagueData" then
+						if #child == 1 and child[1]:len() > 0 then
+							-- trim value
+							self.TradeLeagueData = child[1]:match"^%s*(.*)":match"(.-)%s*$"
+						end
+					end
+				end
 			end
 		end
 	end
@@ -703,7 +715,7 @@ function main:SaveSettings()
 		t_insert(sharedItemList, set)
 	end
 	t_insert(setXML, sharedItemList)
-	t_insert(setXML, { elem = "Misc", attrib = {
+	local misc = { elem = "Misc", attrib = {
 		buildSortMode = self.buildSortMode,
 		connectionProtocol = tostring(launch.connectionProtocol),
 		proxyURL = launch.proxyURL,
@@ -728,7 +740,9 @@ function main:SaveSettings()
 		invertSliderScrollDirection = tostring(self.invertSliderScrollDirection),
 		disableDevAutoSave = tostring(self.disableDevAutoSave),
 		showPublicBuilds = tostring(self.showPublicBuilds)
-	} })
+	} }
+	t_insert(misc, { elem = "TradeLeagueData", [1] = self.TradeLeagueData:match"^%s*(.*)":match"(.-)%s*$"})
+	t_insert(setXML, misc)
 	local res, errMsg = common.xml.SaveXMLFile(setXML, self.userPath.."Settings.xml")
 	if not res then
 		launch:ShowErrMsg("Error saving 'Settings.xml': %s", errMsg)

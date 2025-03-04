@@ -400,6 +400,8 @@ function TradeQueryRequestsClass:FetchRealmsAndLeaguesHTML(callback)
 			-- full json state obj from HTML
 			local dataStr = response.body:match('require%(%["main"%].+ t%((.+)%);}%);}%);')
 			if not dataStr then
+				-- the response.body can hide a lua error, so it doesn't hurt to dump it to the console if debugging
+				ConPrintf("invalid response data: %s", response.body)
 				return callback(nil, "JSON object not found on the page.")
 			end
 			local data, _, err = dkjson.decode(dataStr)
